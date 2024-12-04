@@ -34,68 +34,69 @@ function App() {
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState([]);
   const [openDialog, setOpenDialog] = useState(
-    !localStorage.getItem("userName")
+    !localStorage.getItem("userInfo")
   );
   const [drawerOpen, setDrawerOpen] = useState(false);
 
   const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
+  const isMobile = useMediaQuery(theme.breakpoints.down("md"));
 
   useEffect(() => {
-    if (localStorage.getItem("userName")) {
-      const storedName = localStorage.getItem("userName");
-      setUserName(storedName);
+    const storedUserInfo = JSON.parse(localStorage.getItem("userInfo"));
 
-      axios
-        .post("http://localhost:5000/users", {
-          name: storedName,
-          socketId: socket.id,
-        })
-        .then((res) => {
-          setUserId(res.data.id); // Ensure userId is set
-        })
-        .catch((error) => console.error("Error registering user:", error));
+    if (storedUserInfo) {
+      setUserId(storedUserInfo.id);
+      setUserName(storedUserInfo.name);
     }
-
+    if (storedUserInfo && storedUserInfo?.id) {
+      registerUser();
+    }
     axios.get("http://localhost:5000/rooms").then((res) => setRooms(res.data));
     axios.get("http://localhost:5000/users").then((res) => setUsers(res.data));
 
     socket.on("new_user", (user) => setUsers((prev) => [...prev, user]));
     socket.on("new_room", (room) => setRooms((prev) => [...prev, room]));
-
-    return () => socket.disconnect();
-  }, []);
-
-  useEffect(() => {
     socket.on("receive_private_message", (msg) =>
       setMessages((prev) => [...prev, msg])
     );
+
     socket.on("receive_room_message", (msg) =>
       setMessages((prev) => [...prev, msg])
     );
 
     return () => {
+      socket.off("new_user");
+      socket.off("new_room");
       socket.off("receive_private_message");
       socket.off("receive_room_message");
     };
-  }, []);
+  }, [socket.id]);
 
   const registerUser = () => {
-    if (userName.trim()) {
-      localStorage.setItem("userName", userName);
+    const storedUserInfo = JSON.parse(localStorage.getItem("userInfo"));
+    axios
+      .post("http://localhost:5000/users", {
+        userId: storedUserInfo?.id,
+        name: storedUserInfo ? storedUserInfo.name : userName,
+        socketId: socket.id,
+      })
+      .then((res) => {
+        const userData = {
+          id: res.data.id,
+          name: res.data.name,
+        };
 
-      axios
-        .post("http://localhost:5000/users", {
-          name: userName,
-          socketId: socket.id,
-        })
-        .then((res) => {
-          setUserId(res.data.id);
+        if (!storedUserInfo?.id) {
+          setUserId(userData.id);
+          setUserName(userData.name);
           setOpenDialog(false);
-        });
-    }
-  };
+          socket.emit("register_user", userData);
+        }
 
+        localStorage.setItem("userInfo", JSON.stringify(userData));
+      })
+      .catch((error) => console.error("Error registering user:", error));
+  };
   const joinRoom = (room) => {
     setCurrentChat({ type: "room", ...room });
     socket.emit("join_room", { roomId: room.id, userId });
@@ -112,57 +113,65 @@ function App() {
   const createRoom = () => {
     const roomName = prompt("Enter room name");
     if (roomName) {
-      axios.post("http://localhost:5000/rooms", { name: roomName });
+      axios
+        .post("http://localhost:5000/rooms", { name: roomName })
+        .catch((error) => console.error("Error creating room:", error));
     }
   };
 
   const sendMessage = () => {
     if (message.trim()) {
-      if (currentChat.type === "room") {
+      if (currentChat?.type === "room") {
         socket.emit("send_room_message", {
           senderId: userId,
           roomId: currentChat.id,
           content: message,
         });
-      } else {
+      } else if (currentChat?.type === "user") {
         socket.emit("send_private_message", {
           senderId: userId,
           recipientId: currentChat.id,
           content: message,
         });
+        let messageContent = { senderId: userId, content: message };
+        setMessages((prevMessages) => [...prevMessages, messageContent]);
       }
-
       setMessage("");
     }
   };
 
-  const SidebarContent = () => (
-    <Box padding={2}>
-      <Typography variant="h6">Rooms</Typography>
-      <Button variant="contained" fullWidth onClick={createRoom}>
-        Create Room
-      </Button>
-      <List>
-        {rooms.map((room) => (
-          <ListItem button key={room.id} onClick={() => joinRoom(room)}>
-            <ListItemText primary={room.name} />
-          </ListItem>
-        ))}
-      </List>
-      <Typography variant="h6">Users</Typography>
-      <List>
-        {users.map((user) => (
-          <ListItem button key={user.id} onClick={() => selectUser(user)}>
-            <ListItemText primary={user.name} />
-          </ListItem>
-        ))}
-      </List>
-    </Box>
-  );
+  const SidebarContent = () => {
+    const currentUserId = userId;
+
+    return (
+      <Box padding={2}>
+        <Typography variant="h6">Rooms</Typography>
+        <Button variant="contained" fullWidth onClick={createRoom}>
+          Create Room
+        </Button>
+        <List>
+          {rooms.map((room) => (
+            <ListItem button key={room.id} onClick={() => joinRoom(room)}>
+              <ListItemText primary={room.name} sx={{ cursor: "pointer" }} />
+            </ListItem>
+          ))}
+        </List>
+        <Typography variant="h6">Users</Typography>
+        <List>
+          {users
+            .filter((user) => user.id !== currentUserId)
+            .map((user) => (
+              <ListItem button key={user.id} onClick={() => selectUser(user)}>
+                <ListItemText primary={user.name} sx={{ cursor: "pointer" }} />
+              </ListItem>
+            ))}
+        </List>
+      </Box>
+    );
+  };
 
   return (
     <Box display="flex" height="100vh">
-      {/* Sidebar for Desktop */}
       {!isMobile && (
         <Box
           width="300px"
@@ -173,7 +182,6 @@ function App() {
         </Box>
       )}
 
-      {/* Drawer for Mobile */}
       {isMobile && (
         <Drawer
           anchor="left"
@@ -185,7 +193,6 @@ function App() {
       )}
 
       <Box flexGrow={1} display="flex" flexDirection="column">
-        {/* App Bar */}
         {isMobile && (
           <AppBar position="static">
             <Toolbar>
@@ -202,7 +209,6 @@ function App() {
           </AppBar>
         )}
 
-        {/* Chat Area */}
         <Box padding={2} flexGrow={1} display="flex" flexDirection="column">
           <Typography variant="h6" gutterBottom>
             Chat with {currentChat?.name || "Select a user or room"}
@@ -215,28 +221,31 @@ function App() {
               border: "1px solid #ddd",
             }}
           >
-            {messages.map((msg, idx) => (
-              <Box
-                key={idx}
-                textAlign={msg.senderId === userId ? "right" : "left"}
-                marginY={1}
-              >
-                <Typography
-                  variant="body2"
-                  style={{
-                    display: "inline-block",
-                    padding: "10px",
-                    borderRadius: "8px",
-                    backgroundColor:
-                      msg.senderId === userId ? "#d1f0d1" : "#f1f1f1",
-                    maxWidth: "70%",
-                  }}
+            {messages.map((msg, idx) => {
+              const isCurrentUser = msg.senderId === userId;
+              return (
+                <Box
+                  key={idx}
+                  textAlign={isCurrentUser ? "right" : "left"}
+                  marginY={1}
                 >
-                  {msg.content}
-                </Typography>
-              </Box>
-            ))}
+                  <Typography
+                    variant="body2"
+                    style={{
+                      display: "inline-block",
+                      padding: "10px",
+                      borderRadius: "8px",
+                      backgroundColor: isCurrentUser ? "#d1f0d1" : "#f1f1f1",
+                      maxWidth: "70%",
+                    }}
+                  >
+                    {msg.content}
+                  </Typography>
+                </Box>
+              );
+            })}
           </Paper>
+
           <Box display="flex" marginTop={2}>
             <TextField
               fullWidth
@@ -256,7 +265,6 @@ function App() {
           </Box>
         </Box>
 
-        {/* User Registration Dialog */}
         <Dialog open={openDialog}>
           <DialogTitle>Register</DialogTitle>
           <DialogContent>
@@ -270,7 +278,7 @@ function App() {
             />
           </DialogContent>
           <DialogActions>
-            <Button onClick={registerUser} color="primary">
+            <Button onClick={registerUser} color="primary" disabled={!userName}>
               Register
             </Button>
           </DialogActions>
