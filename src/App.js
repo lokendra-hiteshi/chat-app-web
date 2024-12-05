@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   AppBar,
   Toolbar,
@@ -17,17 +17,22 @@ import {
   Box,
   Paper,
   useMediaQuery,
+  Avatar,
+  Tooltip,
 } from "@mui/material";
 import MenuIcon from "@mui/icons-material/Menu";
 import { useTheme } from "@mui/material/styles";
 import io from "socket.io-client";
 import axios from "axios";
+import ControlPointIcon from "@mui/icons-material/ControlPoint";
 
 const socket = io("http://localhost:5000");
 
 function App() {
+  const messagesEndRef = useRef(null);
   const [userName, setUserName] = useState("");
   const [userId, setUserId] = useState(null);
+  const [userInfo, setUserInfo] = useState({});
   const [users, setUsers] = useState([]);
   const [rooms, setRooms] = useState([]);
   const [currentChat, setCurrentChat] = useState(null);
@@ -45,6 +50,7 @@ function App() {
     const storedUserInfo = JSON.parse(localStorage.getItem("userInfo"));
 
     if (storedUserInfo) {
+      setUserInfo(storedUserInfo);
       setUserId(storedUserInfo.id);
       setUserName(storedUserInfo.name);
     }
@@ -53,6 +59,18 @@ function App() {
     }
     axios.get("http://localhost:5000/rooms").then((res) => setRooms(res.data));
     axios.get("http://localhost:5000/users").then((res) => setUsers(res.data));
+
+    if (storedUserInfo && currentChat) {
+      axios
+        .get("http://localhost:5000/messages", {
+          params: {
+            sender_id: storedUserInfo.id,
+            recipient_id: currentChat?.type === "user" ? currentChat?.id : "",
+            room_id: currentChat?.type === "room" ? currentChat?.id : "",
+          },
+        })
+        .then((res) => setMessages(res.data));
+    }
 
     socket.on("new_user", (user) => setUsers((prev) => [...prev, user]));
     socket.on("new_room", (room) => setRooms((prev) => [...prev, room]));
@@ -70,7 +88,7 @@ function App() {
       socket.off("receive_private_message");
       socket.off("receive_room_message");
     };
-  }, [socket.id]);
+  }, [socket.id, currentChat]);
 
   const registerUser = () => {
     const storedUserInfo = JSON.parse(localStorage.getItem("userInfo"));
@@ -123,36 +141,83 @@ function App() {
     if (message.trim()) {
       if (currentChat?.type === "room") {
         socket.emit("send_room_message", {
-          senderId: userId,
-          roomId: currentChat.id,
+          sender_id: userId,
+          sender_info: userInfo,
+          room_id: currentChat.id,
           content: message,
         });
       } else if (currentChat?.type === "user") {
         socket.emit("send_private_message", {
-          senderId: userId,
-          recipientId: currentChat.id,
+          sender_id: userId,
+          sender_info: userInfo,
+          recipient_id: currentChat.id,
           content: message,
         });
-        let messageContent = { senderId: userId, content: message };
+        let messageContent = {
+          sender_id: userId,
+          recipient_id: currentChat.id,
+          content: message,
+        };
         setMessages((prevMessages) => [...prevMessages, messageContent]);
       }
       setMessage("");
     }
   };
 
+  const scrollToBottom = () => {
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
+    }
+  };
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
+
   const SidebarContent = () => {
     const currentUserId = userId;
 
     return (
       <Box padding={2}>
-        <Typography variant="h6">Rooms</Typography>
-        <Button variant="contained" fullWidth onClick={createRoom}>
-          Create Room
-        </Button>
+        <Box
+          sx={{
+            display: "flex",
+            justifyContent: "space-between",
+            width: "100%",
+            marginBottom: 4,
+          }}
+        >
+          <Avatar sx={{ bgcolor: "#FF5722" }}>
+            {userInfo?.name?.charAt(0)}
+          </Avatar>
+          <Typography variant="h6">{userInfo?.name}</Typography>
+        </Box>
+        <Box
+          sx={{
+            display: "flex",
+            justifyContent: "space-between",
+            width: "100%",
+          }}
+        >
+          <Typography variant="h6">Rooms</Typography>
+          <Tooltip title="Create Room">
+            <IconButton variant="contained" fullWidth onClick={createRoom}>
+              <ControlPointIcon />
+            </IconButton>
+          </Tooltip>
+        </Box>
+
         <List>
           {rooms.map((room) => (
-            <ListItem button key={room.id} onClick={() => joinRoom(room)}>
-              <ListItemText primary={room.name} sx={{ cursor: "pointer" }} />
+            <ListItem
+              button
+              key={room?.id}
+              onClick={() => joinRoom(room)}
+              sx={{
+                backgroundColor: currentChat?.id === room?.id ? "#F1F0E8" : "",
+              }}
+            >
+              <ListItemText primary={room?.name} sx={{ cursor: "pointer" }} />
             </ListItem>
           ))}
         </List>
@@ -161,8 +226,16 @@ function App() {
           {users
             .filter((user) => user.id !== currentUserId)
             .map((user) => (
-              <ListItem button key={user.id} onClick={() => selectUser(user)}>
-                <ListItemText primary={user.name} sx={{ cursor: "pointer" }} />
+              <ListItem
+                button
+                key={user?.id}
+                onClick={() => selectUser(user)}
+                sx={{
+                  backgroundColor:
+                    currentChat?.id === user?.id ? "#F1F0E8" : "",
+                }}
+              >
+                <ListItemText primary={user?.name} sx={{ cursor: "pointer" }} />
               </ListItem>
             ))}
         </List>
@@ -204,7 +277,18 @@ function App() {
               >
                 <MenuIcon />
               </IconButton>
-              <Typography variant="h6">Chat App</Typography>
+              <Box
+                sx={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  width: "100%",
+                }}
+              >
+                <Typography variant="h6">Chat App</Typography>
+                <Avatar sx={{ bgcolor: "#FF5722" }}>
+                  {userInfo?.name?.charAt(0)}
+                </Avatar>
+              </Box>
             </Toolbar>
           </AppBar>
         )}
@@ -219,18 +303,20 @@ function App() {
               padding: "10px",
               overflowY: "auto",
               border: "1px solid #ddd",
+              height: "400px",
+              scrollbarWidth: "none",
+              msOverflowStyle: "none",
             }}
           >
             {messages.map((msg, idx) => {
-              const isCurrentUser = msg.senderId === userId;
+              const isCurrentUser = msg?.sender_id === userId;
               return (
                 <Box
                   key={idx}
                   textAlign={isCurrentUser ? "right" : "left"}
                   marginY={1}
                 >
-                  <Typography
-                    variant="body2"
+                  <Box
                     style={{
                       display: "inline-block",
                       padding: "10px",
@@ -239,11 +325,21 @@ function App() {
                       maxWidth: "70%",
                     }}
                   >
-                    {msg.content}
-                  </Typography>
+                    {!isCurrentUser && (
+                      <Typography
+                        variant="body2"
+                        sx={{ fontSize: "12px", color: "red" }}
+                      >
+                        {msg?.sender_info?.name}
+                      </Typography>
+                    )}
+
+                    <Typography variant="body2">{msg?.content}</Typography>
+                  </Box>
                 </Box>
               );
             })}
+            <div ref={messagesEndRef} />
           </Paper>
 
           <Box display="flex" marginTop={2}>
