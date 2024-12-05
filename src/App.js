@@ -26,7 +26,12 @@ import io from "socket.io-client";
 import axios from "axios";
 import ControlPointIcon from "@mui/icons-material/ControlPoint";
 
-const socket = io("http://localhost:5000");
+const isProduction = window.location.hostname !== "localhost";
+const backendURL = isProduction
+  ? "http://192.168.100.186:5000"
+  : "http://localhost:5000";
+
+const socket = io(backendURL);
 
 function App() {
   const messagesEndRef = useRef(null);
@@ -57,12 +62,12 @@ function App() {
     if (storedUserInfo && storedUserInfo?.id) {
       registerUser();
     }
-    axios.get("http://localhost:5000/rooms").then((res) => setRooms(res.data));
-    axios.get("http://localhost:5000/users").then((res) => setUsers(res.data));
+    axios.get(`${backendURL}/rooms`).then((res) => setRooms(res.data));
+    axios.get(`${backendURL}/users`).then((res) => setUsers(res.data));
 
     if (storedUserInfo && currentChat) {
       axios
-        .get("http://localhost:5000/messages", {
+        .get(`${backendURL}/messages`, {
           params: {
             sender_id: storedUserInfo.id,
             recipient_id: currentChat?.type === "user" ? currentChat?.id : "",
@@ -93,7 +98,7 @@ function App() {
   const registerUser = () => {
     const storedUserInfo = JSON.parse(localStorage.getItem("userInfo"));
     axios
-      .post("http://localhost:5000/users", {
+      .post(`${backendURL}/users`, {
         userId: storedUserInfo?.id,
         name: storedUserInfo ? storedUserInfo.name : userName,
         socketId: socket.id,
@@ -132,7 +137,7 @@ function App() {
     const roomName = prompt("Enter room name");
     if (roomName) {
       axios
-        .post("http://localhost:5000/rooms", { name: roomName })
+        .post(`${backendURL}/rooms`, { name: roomName })
         .catch((error) => console.error("Error creating room:", error));
     }
   };
