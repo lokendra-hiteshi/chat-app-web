@@ -95,6 +95,8 @@ function App() {
     };
   }, [socket.id, currentChat]);
 
+  useEffect(() => {}, [userInfo]);
+
   const registerUser = () => {
     const storedUserInfo = JSON.parse(localStorage.getItem("userInfo"));
     axios
@@ -115,7 +117,7 @@ function App() {
           setOpenDialog(false);
           socket.emit("register_user", userData);
         }
-
+        setUserInfo(userData);
         localStorage.setItem("userInfo", JSON.stringify(userData));
       })
       .catch((error) => console.error("Error registering user:", error));
@@ -160,6 +162,7 @@ function App() {
         });
         let messageContent = {
           sender_id: userId,
+          sender_info: userInfo,
           recipient_id: currentChat.id,
           content: message,
         };
@@ -249,12 +252,12 @@ function App() {
   };
 
   return (
-    <Box display="flex" height="100vh">
+    <Box display="flex" height="98vh">
       {!isMobile && (
         <Box
           width="300px"
           borderRight="1px solid #ddd"
-          style={{ overflowY: "auto" }}
+          // style={{ overflowY: "auto" }}
         >
           <SidebarContent />
         </Box>
@@ -313,37 +316,50 @@ function App() {
               msOverflowStyle: "none",
             }}
           >
-            {messages.map((msg, idx) => {
-              const isCurrentUser = msg?.sender_id === userId;
-              return (
-                <Box
-                  key={idx}
-                  textAlign={isCurrentUser ? "right" : "left"}
-                  marginY={1}
-                >
-                  <Box
-                    style={{
-                      display: "inline-block",
-                      padding: "10px",
-                      borderRadius: "8px",
-                      backgroundColor: isCurrentUser ? "#d1f0d1" : "#f1f1f1",
-                      maxWidth: "70%",
-                    }}
-                  >
-                    {!isCurrentUser && (
-                      <Typography
-                        variant="body2"
-                        sx={{ fontSize: "12px", color: "red" }}
+            {currentChat ? (
+              <>
+                {messages.map((msg, idx) => {
+                  const isCurrentUser = msg?.sender_id === userId;
+                  return (
+                    <Box
+                      key={idx}
+                      textAlign={isCurrentUser ? "right" : "left"}
+                      marginY={1}
+                    >
+                      <Box
+                        style={{
+                          display: "inline-block",
+                          padding: "10px",
+                          borderRadius: "8px",
+                          backgroundColor: isCurrentUser
+                            ? "#d1f0d1"
+                            : "#f1f1f1",
+                          maxWidth: "70%",
+                        }}
                       >
-                        {msg?.sender_info?.name}
-                      </Typography>
-                    )}
+                        {!isCurrentUser && (
+                          <Typography
+                            variant="body2"
+                            sx={{ fontSize: "12px", color: "red" }}
+                          >
+                            {msg?.sender_info?.name}
+                          </Typography>
+                        )}
 
-                    <Typography variant="body2">{msg?.content}</Typography>
-                  </Box>
-                </Box>
-              );
-            })}
+                        <Typography variant="body2">{msg?.content}</Typography>
+                      </Box>
+                    </Box>
+                  );
+                })}
+              </>
+            ) : (
+              <Box textAlign="center" marginY={4}>
+                <Typography variant="h3">
+                  Please Select User or Room To Start Chat ☺.
+                </Typography>
+              </Box>
+            )}
+
             <div ref={messagesEndRef} />
           </Paper>
 
@@ -360,6 +376,7 @@ function App() {
               color="primary"
               onClick={sendMessage}
               style={{ marginLeft: "10px" }}
+              disabled={!currentChat}
             >
               Send
             </Button>
