@@ -5,9 +5,6 @@ import {
   IconButton,
   Typography,
   Drawer,
-  List,
-  ListItem,
-  ListItemText,
   Button,
   TextField,
   Dialog,
@@ -15,16 +12,15 @@ import {
   DialogContent,
   DialogTitle,
   Box,
-  Paper,
   useMediaQuery,
   Avatar,
-  Tooltip,
 } from "@mui/material";
 import MenuIcon from "@mui/icons-material/Menu";
 import { useTheme } from "@mui/material/styles";
 import io from "socket.io-client";
 import axios from "axios";
-import ControlPointIcon from "@mui/icons-material/ControlPoint";
+import Sidebar from "./components/sidebar";
+import ChatMessages from "./components/chatpage";
 
 const isProduction = window.location.hostname !== "localhost";
 const backendURL = isProduction
@@ -182,227 +178,102 @@ function App() {
     scrollToBottom();
   }, [messages]);
 
-  const SidebarContent = () => {
-    const currentUserId = userId;
-
-    return (
-      <Box padding={2}>
-        <Box
-          sx={{
-            display: "flex",
-            justifyContent: "space-between",
-            width: "100%",
-            marginBottom: 4,
-          }}
-        >
-          <Avatar sx={{ bgcolor: "#FF5722" }}>
-            {userInfo?.name?.charAt(0)}
-          </Avatar>
-          <Typography variant="h6">{userInfo?.name}</Typography>
-        </Box>
-        <Box
-          sx={{
-            display: "flex",
-            justifyContent: "space-between",
-            width: "100%",
-          }}
-        >
-          <Typography variant="h6">Rooms</Typography>
-          <Tooltip title="Create Room">
-            <IconButton variant="contained" fullWidth onClick={createRoom}>
-              <ControlPointIcon />
-            </IconButton>
-          </Tooltip>
-        </Box>
-
-        <List>
-          {rooms.map((room) => (
-            <ListItem
-              button
-              key={room?.id}
-              onClick={() => joinRoom(room)}
-              sx={{
-                backgroundColor: currentChat?.id === room?.id ? "#F1F0E8" : "",
-              }}
-            >
-              <ListItemText primary={room?.name} sx={{ cursor: "pointer" }} />
-            </ListItem>
-          ))}
-        </List>
-        <Typography variant="h6">Users</Typography>
-        <List>
-          {users
-            .filter((user) => user.id !== currentUserId)
-            .map((user) => (
-              <ListItem
-                button
-                key={user?.id}
-                onClick={() => selectUser(user)}
-                sx={{
-                  backgroundColor:
-                    currentChat?.id === user?.id ? "#F1F0E8" : "",
-                }}
-              >
-                <ListItemText primary={user?.name} sx={{ cursor: "pointer" }} />
-              </ListItem>
-            ))}
-        </List>
-      </Box>
-    );
-  };
-
   return (
-    <Box display="flex" height="98vh">
-      {!isMobile && (
-        <Box
-          width="300px"
-          borderRight="1px solid #ddd"
-          // style={{ overflowY: "auto" }}
-        >
-          <SidebarContent />
-        </Box>
-      )}
-
-      {isMobile && (
-        <Drawer
-          anchor="left"
-          open={drawerOpen}
-          onClose={() => setDrawerOpen(false)}
-        >
-          <SidebarContent />
-        </Drawer>
-      )}
-
-      <Box flexGrow={1} display="flex" flexDirection="column">
-        {isMobile && (
-          <AppBar position="static">
-            <Toolbar>
-              <IconButton
-                edge="start"
-                color="inherit"
-                aria-label="menu"
-                onClick={() => setDrawerOpen(true)}
-              >
-                <MenuIcon />
-              </IconButton>
-              <Box
-                sx={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  width: "100%",
-                }}
-              >
-                <Typography variant="h6">Chat App</Typography>
-                <Avatar sx={{ bgcolor: "#FF5722" }}>
-                  {userInfo?.name?.charAt(0)}
-                </Avatar>
-              </Box>
-            </Toolbar>
-          </AppBar>
+    <>
+      <Box display="flex" height="98vh">
+        {!isMobile && (
+          <Box width="300px" borderRight="1px solid #ddd">
+            <Sidebar
+              userInfo={userInfo}
+              rooms={rooms}
+              users={users}
+              currentChat={currentChat}
+              userId={userId}
+              joinRoom={joinRoom}
+              selectUser={selectUser}
+              createRoom={createRoom}
+            />
+          </Box>
         )}
 
-        <Box padding={2} flexGrow={1} display="flex" flexDirection="column">
-          <Typography variant="h6" gutterBottom>
-            Chat with {currentChat?.name || "Select a user or room"}
-          </Typography>
-          <Paper
-            style={{
-              flexGrow: 1,
-              padding: "10px",
-              overflowY: "auto",
-              border: "1px solid #ddd",
-              height: "400px",
-              scrollbarWidth: "none",
-              msOverflowStyle: "none",
-            }}
+        {isMobile && (
+          <Drawer
+            anchor="left"
+            open={drawerOpen}
+            onClose={() => setDrawerOpen(false)}
           >
-            {currentChat ? (
-              <>
-                {messages.map((msg, idx) => {
-                  const isCurrentUser = msg?.sender_id === userId;
-                  return (
-                    <Box
-                      key={idx}
-                      textAlign={isCurrentUser ? "right" : "left"}
-                      marginY={1}
-                    >
-                      <Box
-                        style={{
-                          display: "inline-block",
-                          padding: "10px",
-                          borderRadius: "8px",
-                          backgroundColor: isCurrentUser
-                            ? "#d1f0d1"
-                            : "#f1f1f1",
-                          maxWidth: "70%",
-                        }}
-                      >
-                        {!isCurrentUser && (
-                          <Typography
-                            variant="body2"
-                            sx={{ fontSize: "12px", color: "red" }}
-                          >
-                            {msg?.sender_info?.name}
-                          </Typography>
-                        )}
-
-                        <Typography variant="body2">{msg?.content}</Typography>
-                      </Box>
-                    </Box>
-                  );
-                })}
-              </>
-            ) : (
-              <Box textAlign="center" marginY={4}>
-                <Typography variant="h3">
-                  Please Select User or Room To Start Chat ☺.
-                </Typography>
-              </Box>
-            )}
-
-            <div ref={messagesEndRef} />
-          </Paper>
-
-          <Box display="flex" marginTop={2}>
-            <TextField
-              fullWidth
-              variant="outlined"
-              placeholder="Type a message..."
-              value={message}
-              onChange={(e) => setMessage(e.target.value)}
+            <Sidebar
+              userInfo={userInfo}
+              rooms={rooms}
+              users={users}
+              currentChat={currentChat}
+              userId={userId}
+              joinRoom={joinRoom}
+              selectUser={selectUser}
+              createRoom={createRoom}
             />
-            <Button
-              variant="contained"
-              color="primary"
-              onClick={sendMessage}
-              style={{ marginLeft: "10px" }}
-              disabled={!currentChat}
-            >
-              Send
-            </Button>
-          </Box>
+          </Drawer>
+        )}
+
+        <Box flexGrow={1} display="flex" flexDirection="column">
+          {isMobile && (
+            <AppBar position="static">
+              <Toolbar>
+                <IconButton
+                  edge="start"
+                  color="inherit"
+                  aria-label="menu"
+                  onClick={() => setDrawerOpen(true)}
+                >
+                  <MenuIcon />
+                </IconButton>
+                <Box
+                  sx={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    width: "100%",
+                  }}
+                >
+                  <Typography variant="h6">Chat App</Typography>
+                  <Avatar sx={{ bgcolor: "#FF5722" }}>
+                    {userInfo?.name?.charAt(0)}
+                  </Avatar>
+                </Box>
+              </Toolbar>
+            </AppBar>
+          )}
+
+          <ChatMessages
+            currentChat={currentChat}
+            messages={messages}
+            userId={userId}
+            userInfo={userInfo}
+            message={message}
+            setMessage={setMessage}
+            sendMessage={sendMessage}
+          />
         </Box>
-
-        <Dialog open={openDialog}>
-          <DialogTitle>Register</DialogTitle>
-          <DialogContent>
-            <TextField
-              autoFocus
-              margin="dense"
-              label="User Name"
-              fullWidth
-              value={userName}
-              onChange={(e) => setUserName(e.target.value)}
-            />
-          </DialogContent>
-          <DialogActions>
-            <Button onClick={registerUser} color="primary" disabled={!userName}>
-              Register
-            </Button>
-          </DialogActions>
-        </Dialog>
       </Box>
-    </Box>
+
+      <Dialog open={openDialog}>
+        <DialogTitle>Register</DialogTitle>
+        <DialogContent>
+          <TextField
+            autoFocus
+            margin="dense"
+            label="User Name"
+            fullWidth
+            value={userName}
+            onChange={(e) => setUserName(e.target.value)}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={registerUser} color="primary" disabled={!userName}>
+            Register
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </>
   );
 }
 
