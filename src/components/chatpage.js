@@ -76,7 +76,7 @@ const ChatMessages = ({
         ) : (
           <Box textAlign="center" marginY={4}>
             <Typography variant="h3">
-              Please Select User or Room To Start Chat ☺.
+              Please Select User or Room To Start Chat 😊.
             </Typography>
           </Box>
         )}
